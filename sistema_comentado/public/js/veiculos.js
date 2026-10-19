@@ -3,6 +3,7 @@ const tbody = document.getElementById('tbody');
 iniciarPagina();
 carregar();
 
+// Busca os veículos cadastrados e atualiza a tabela da página.
 async function carregar() {
     const veiculos = await api('/api/veiculos');
     tbody.innerHTML = veiculos.map(v => `
