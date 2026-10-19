@@ -1,4 +1,5 @@
 // Chamada à API. Se a sessão expirou (401), volta para o login.
+// Centraliza as requisições ao servidor e padroniza o tratamento de erros e sessão expirada.
 async function api(url, opcoes = {}) {
     const resp = await fetch(url, {
         method: opcoes.method || 'GET',
