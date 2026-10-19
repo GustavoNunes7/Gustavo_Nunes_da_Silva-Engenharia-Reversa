@@ -22,6 +22,7 @@ app.use(session({
     cookie: { maxAge: MINUTOS_SESSAO * 60 * 1000, httpOnly: true }
 }));
 // Publica HTML, CSS e JavaScript da pasta public para o navegador carregar a interface.
+// Disponibiliza os arquivos HTML, CSS e JavaScript da pasta public para o navegador.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ao abrir a raiz do site, direciona o usuário para a tela de login.
@@ -41,17 +42,20 @@ function exigirLogin(req, res, next) {
 // Autentica o usuário: verifica os campos, procura o login e compara a senha com o hash salvo.
 app.post('/api/login', (req, res) => {
     // Extrai as credenciais enviadas pelo formulário de login.
+    // Lê as credenciais enviadas pela tela de login.
     const { login, senha } = req.body;
     if (!login || !senha) {
         return res.status(400).json({ erro: 'Informe usuário e senha.' });
     }
     // O ? recebe o valor como parâmetro, evitando montar SQL por concatenação de texto.
+    // Consulta o usuário pelo login; o parâmetro ? evita concatenar o valor no SQL.
     const usuario = db.prepare('SELECT * FROM usuarios WHERE login = ?').get(login.trim());
     // Rejeita tanto usuários inexistentes quanto senhas que não correspondem ao hash salvo.
     if (!usuario || !bcrypt.compareSync(senha, usuario.senha)) {
         return res.status(401).json({ erro: 'Usuário ou senha inválidos.' });
     }
     // Guarda na sessão apenas os dados necessários para identificar o usuário conectado.
+    // Mantém na sessão apenas o identificador e o nome para reconhecer o usuário conectado.
     req.session.usuario = { id: usuario.id, nome: usuario.nome };
     res.json({ ok: true });
 });
@@ -71,6 +75,7 @@ const clienteJson = c => ({ ...c, cpf: descriptografar(c.cpf) });
 // Centraliza as regras de validação de cliente para reaproveitá-las no cadastro e na edição.
 function validarCliente(corpo, idAtual) {
     // Normaliza o nome e mantém somente os dígitos do CPF para validar o formato.
+    // Normaliza o nome e remove caracteres não numéricos do CPF antes da validação.
     const nome = (corpo.nome || '').trim();
     const cpf = String(corpo.cpf || '').replace(/\D/g, '');
     if (!nome) return 'Informe o nome do cliente.';
@@ -86,6 +91,7 @@ function validarCliente(corpo, idAtual) {
 // Lista clientes e aplica a busca por nome, e-mail, telefone ou CPF.
 app.get('/api/clientes', exigirLogin, (req, res) => {
     // Normaliza o texto pesquisado para que a busca não dependa de maiúsculas/minúsculas.
+    // Normaliza o filtro para pesquisar sem diferenciar letras maiúsculas e minúsculas.
     const termo = (req.query.busca || '').trim().toLowerCase();
     const digitos = termo.replace(/\D/g, '');
     // Consulta todos os clientes em ordem alfabética e converte o CPF para uso na interface.
@@ -138,6 +144,7 @@ app.get('/api/veiculos', exigirLogin, (req, res) => {
 // Registra veículo após verificar placa, campos obrigatórios, cliente associado e placa duplicada.
 app.post('/api/veiculos', exigirLogin, (req, res) => {
     const { modelo, tipo, marca, cliente_id } = req.body;
+    // Remove espaços e hífen e padroniza a placa em letras maiúsculas.
     const placa = String(req.body.placa || '').replace(/[\s-]/g, '').toUpperCase();
     if (!PLACA_VALIDA.test(placa)) return res.status(400).json({ erro: 'Informe uma placa válida.' });
     if (!modelo || !modelo.trim()) return res.status(400).json({ erro: 'Informe o modelo do veículo.' });
@@ -179,6 +186,7 @@ app.get('/api/agendamentos', exigirLogin, (req, res) => {
 // Cria um agendamento, exigindo um veículo existente, data válida e descrição do serviço.
 app.post('/api/agendamentos', exigirLogin, (req, res) => {
     // Separa os três campos exigidos para registrar um novo serviço.
+    // Separa os dados necessários para criar um novo agendamento.
     const { veiculo_id, data_agendamento, servico } = req.body;
     if (!veiculo_id || !db.prepare('SELECT id FROM veiculos WHERE id = ?').get(veiculo_id)) {
         return res.status(400).json({ erro: 'Selecione um veículo.' });
