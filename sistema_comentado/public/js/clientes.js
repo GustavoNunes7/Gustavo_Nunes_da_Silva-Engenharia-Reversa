@@ -5,6 +5,7 @@ let editandoId = null;
 iniciarPagina();
 carregar();
 
+// Consulta a API e atualiza a tabela com os clientes que correspondem à pesquisa.
 async function carregar() {
     const termo = document.getElementById('busca').value.trim();
     clientes = await api('/api/clientes?busca=' + encodeURIComponent(termo));
