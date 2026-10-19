@@ -5,6 +5,7 @@ const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
 // Mantém o arquivo SQLite dentro desta pasta, independentemente da pasta de onde o programa foi iniciado.
+// Guarda o banco nesta pasta para que o caminho não dependa do terminal usado.
 const arquivo = path.join(__dirname, 'oficina_db.sqlite');
 const primeiraVez = !fs.existsSync(arquivo);
 
