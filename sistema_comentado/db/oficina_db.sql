@@ -4,6 +4,7 @@
 -- =========================================================
 PRAGMA foreign_keys = ON;
 
+-- Contas autorizadas a entrar no sistema; cada login deve ser único.
 CREATE TABLE usuarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nome TEXT NOT NULL,
