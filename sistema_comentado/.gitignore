@@ -1,5 +1,14 @@
+# Dependências instaladas pelo npm; podem ser recriadas com npm install.
 node_modules/
+
+# Banco SQLite local, criado automaticamente pela aplicação.
 db/oficina_db.sqlite
+
+# Logs de execução que não precisam fazer parte do repositório.
 *.log
+
+# Configurações locais e possíveis segredos em variáveis de ambiente.
 .env
+
+# Arquivo de metadados de pastas criado pelo macOS.
 .DS_Store
