@@ -5,6 +5,7 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const { criptografar } = require('../seguranca');
 
+// Gera hashes bcrypt para que as senhas de exemplo não sejam gravadas em texto puro.
 const h = s => bcrypt.hashSync(s, 8);
 
 const sql = `-- =========================================================
