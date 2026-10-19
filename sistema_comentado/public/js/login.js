@@ -10,6 +10,7 @@ if (new URLSearchParams(location.search).get('expirou')) {
     mostrarErro('Sua sessão expirou. Faça login novamente.');
 }
 
+// Envia o login sem recarregar a página e redireciona ao painel se a autenticação for aceita.
 document.getElementById('form-login').addEventListener('submit', async (e) => {
     e.preventDefault();
     erro.style.display = 'none';
