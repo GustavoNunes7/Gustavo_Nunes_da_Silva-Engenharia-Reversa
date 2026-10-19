@@ -8,7 +8,8 @@ const { criptografar, descriptografar } = require('./seguranca');
 
 // Cria a aplicação Express, que organiza as rotas HTTP da API.
 const app = express();
-const MINUTOS_SESSAO = 30; // tempo de expiração do login
+// Define por quanto tempo a sessão permanece válida sem renovação.
+const MINUTOS_SESSAO = 30;
 
 // Permite ler o corpo de requisições que enviam dados no formato JSON.
 app.use(express.json());
@@ -20,6 +21,7 @@ app.use(session({
     saveUninitialized: false,
     cookie: { maxAge: MINUTOS_SESSAO * 60 * 1000, httpOnly: true }
 }));
+// Publica HTML, CSS e JavaScript da pasta public para o navegador carregar a interface.
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ao abrir a raiz do site, direciona o usuário para a tela de login.
@@ -27,23 +29,29 @@ app.get('/', (req, res) => res.redirect('/login.html'));
 
 // Middleware reutilizado nas rotas privadas: impede o acesso sem uma sessão autenticada.
 function exigirLogin(req, res, next) {
+    // Sem usuário salvo na sessão, a requisição não está autenticada.
     if (!req.session.usuario) {
         return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
     }
+    // Autoriza a execução da rota protegida quando a sessão é válida.
     next();
 }
 
 // ===================== LOGIN =====================
 // Autentica o usuário: verifica os campos, procura o login e compara a senha com o hash salvo.
 app.post('/api/login', (req, res) => {
+    // Extrai as credenciais enviadas pelo formulário de login.
     const { login, senha } = req.body;
     if (!login || !senha) {
         return res.status(400).json({ erro: 'Informe usuário e senha.' });
     }
+    // O ? recebe o valor como parâmetro, evitando montar SQL por concatenação de texto.
     const usuario = db.prepare('SELECT * FROM usuarios WHERE login = ?').get(login.trim());
+    // Rejeita tanto usuários inexistentes quanto senhas que não correspondem ao hash salvo.
     if (!usuario || !bcrypt.compareSync(senha, usuario.senha)) {
         return res.status(401).json({ erro: 'Usuário ou senha inválidos.' });
     }
+    // Guarda na sessão apenas os dados necessários para identificar o usuário conectado.
     req.session.usuario = { id: usuario.id, nome: usuario.nome };
     res.json({ ok: true });
 });
@@ -62,11 +70,13 @@ const clienteJson = c => ({ ...c, cpf: descriptografar(c.cpf) });
 
 // Centraliza as regras de validação de cliente para reaproveitá-las no cadastro e na edição.
 function validarCliente(corpo, idAtual) {
+    // Normaliza o nome e mantém somente os dígitos do CPF para validar o formato.
     const nome = (corpo.nome || '').trim();
     const cpf = String(corpo.cpf || '').replace(/\D/g, '');
     if (!nome) return 'Informe o nome do cliente.';
     if (cpf.length !== 11) return 'O CPF deve ter 11 dígitos.';
     if (corpo.email && !/^\S+@\S+\.\S+$/.test(corpo.email)) return 'E-mail inválido.';
+    // Compara CPFs descriptografados para impedir que o mesmo documento seja cadastrado duas vezes.
     const repetido = db.prepare('SELECT * FROM clientes').all()
         .some(c => c.id !== idAtual && descriptografar(c.cpf) === cpf);
     if (repetido) return 'Já existe um cliente com este CPF.';
@@ -75,8 +85,10 @@ function validarCliente(corpo, idAtual) {
 
 // Lista clientes e aplica a busca por nome, e-mail, telefone ou CPF.
 app.get('/api/clientes', exigirLogin, (req, res) => {
+    // Normaliza o texto pesquisado para que a busca não dependa de maiúsculas/minúsculas.
     const termo = (req.query.busca || '').trim().toLowerCase();
     const digitos = termo.replace(/\D/g, '');
+    // Consulta todos os clientes em ordem alfabética e converte o CPF para uso na interface.
     const lista = db.prepare('SELECT * FROM clientes ORDER BY nome').all().map(clienteJson);
     // o CPF está criptografado no banco, então a busca é feita depois de descriptografar
     res.json(lista.filter(c => !termo
@@ -98,6 +110,7 @@ app.post('/api/clientes', exigirLogin, (req, res) => {
 
 // Atualiza os dados de um cliente existente; o identificador vem da URL.
 app.put('/api/clientes/:id', exigirLogin, (req, res) => {
+    // Converte o parâmetro da URL para número antes de consultar o registro.
     const id = Number(req.params.id);
     if (!db.prepare('SELECT id FROM clientes WHERE id = ?').get(id)) {
         return res.status(404).json({ erro: 'Cliente não encontrado.' });
@@ -145,6 +158,7 @@ app.post('/api/veiculos', exigirLogin, (req, res) => {
 // Confere o formato e a existência real da data, evitando datas como 31 de fevereiro.
 function dataValida(texto) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(texto || '')) return false;
+    // Constrói a data em horário local para verificar se o calendário realmente a reconhece.
     const d = new Date(texto + 'T00:00:00');
     return !isNaN(d) && d.toISOString().slice(0, 10) === texto;
 }
@@ -164,12 +178,14 @@ app.get('/api/agendamentos', exigirLogin, (req, res) => {
 
 // Cria um agendamento, exigindo um veículo existente, data válida e descrição do serviço.
 app.post('/api/agendamentos', exigirLogin, (req, res) => {
+    // Separa os três campos exigidos para registrar um novo serviço.
     const { veiculo_id, data_agendamento, servico } = req.body;
     if (!veiculo_id || !db.prepare('SELECT id FROM veiculos WHERE id = ?').get(veiculo_id)) {
         return res.status(400).json({ erro: 'Selecione um veículo.' });
     }
     if (!dataValida(data_agendamento)) return res.status(400).json({ erro: 'Informe uma data válida.' });
     if (!servico || !servico.trim()) return res.status(400).json({ erro: 'Informe o serviço.' });
+    // Usa parâmetros SQL para gravar os dados sem concatenar valores diretamente na consulta.
     db.prepare('INSERT INTO agendamentos (veiculo_id, data_agendamento, servico) VALUES (?,?,?)')
         .run(veiculo_id, data_agendamento, servico.trim());
     res.status(201).json({ ok: true });
