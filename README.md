@@ -4,7 +4,7 @@ Documentação acadêmica do sistema web de gestão de clientes, veículos e age
 
 ## Executar
 - Node.js 22.13 ou superior.
-- Na pasta do projeto: npm install e npm start.
+- Na pasta "sistema_comentado":  instale "npm install" e rode "npm start".
 - Acessar http://localhost:3000.
 
 ## Arquivos principais
