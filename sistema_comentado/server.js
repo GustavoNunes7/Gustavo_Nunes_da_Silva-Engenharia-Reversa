@@ -1,3 +1,4 @@
+// Servidor principal da aplicação: recebe as requisições do navegador, valida os dados e consulta o SQLite.
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
@@ -5,10 +6,14 @@ const bcrypt = require('bcryptjs');
 const db = require('./db/conexao');
 const { criptografar, descriptografar } = require('./seguranca');
 
+// Cria a aplicação Express, que organiza as rotas HTTP da API.
 const app = express();
 const MINUTOS_SESSAO = 30; // tempo de expiração do login
 
+// Permite ler o corpo de requisições que enviam dados no formato JSON.
 app.use(express.json());
+// Mantém o usuário autenticado entre as páginas usando uma sessão com cookie.
+// Em produção, o segredo da sessão deve vir de uma variável de ambiente.
 app.use(session({
     secret: 'oficina-autocerta-sessao',
     resave: false,
@@ -17,8 +22,10 @@ app.use(session({
 }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Ao abrir a raiz do site, direciona o usuário para a tela de login.
 app.get('/', (req, res) => res.redirect('/login.html'));
 
+// Middleware reutilizado nas rotas privadas: impede o acesso sem uma sessão autenticada.
 function exigirLogin(req, res, next) {
     if (!req.session.usuario) {
         return res.status(401).json({ erro: 'Sessão expirada. Faça login novamente.' });
@@ -27,6 +34,7 @@ function exigirLogin(req, res, next) {
 }
 
 // ===================== LOGIN =====================
+// Autentica o usuário: verifica os campos, procura o login e compara a senha com o hash salvo.
 app.post('/api/login', (req, res) => {
     const { login, senha } = req.body;
     if (!login || !senha) {
@@ -40,15 +48,19 @@ app.post('/api/login', (req, res) => {
     res.json({ ok: true });
 });
 
+// Encerra a sessão no servidor para que o usuário precise entrar novamente.
 app.post('/api/logout', (req, res) => {
     req.session.destroy(() => res.json({ ok: true }));
 });
 
+// Retorna os dados básicos da sessão para a interface exibir quem está conectado.
 app.get('/api/me', exigirLogin, (req, res) => res.json(req.session.usuario));
 
 // ===================== CLIENTES =====================
+// Converte o registro de cliente para resposta JSON, revelando o CPF apenas para uso autorizado na aplicação.
 const clienteJson = c => ({ ...c, cpf: descriptografar(c.cpf) });
 
+// Centraliza as regras de validação de cliente para reaproveitá-las no cadastro e na edição.
 function validarCliente(corpo, idAtual) {
     const nome = (corpo.nome || '').trim();
     const cpf = String(corpo.cpf || '').replace(/\D/g, '');
@@ -61,6 +73,7 @@ function validarCliente(corpo, idAtual) {
     return null;
 }
 
+// Lista clientes e aplica a busca por nome, e-mail, telefone ou CPF.
 app.get('/api/clientes', exigirLogin, (req, res) => {
     const termo = (req.query.busca || '').trim().toLowerCase();
     const digitos = termo.replace(/\D/g, '');
@@ -73,6 +86,7 @@ app.get('/api/clientes', exigirLogin, (req, res) => {
         || (digitos && c.cpf.includes(digitos))));
 });
 
+// Cadastra um cliente somente depois de validar os campos e criptografar o CPF.
 app.post('/api/clientes', exigirLogin, (req, res) => {
     const erro = validarCliente(req.body, null);
     if (erro) return res.status(400).json({ erro });
@@ -82,6 +96,7 @@ app.post('/api/clientes', exigirLogin, (req, res) => {
     res.status(201).json({ ok: true });
 });
 
+// Atualiza os dados de um cliente existente; o identificador vem da URL.
 app.put('/api/clientes/:id', exigirLogin, (req, res) => {
     const id = Number(req.params.id);
     if (!db.prepare('SELECT id FROM clientes WHERE id = ?').get(id)) {
@@ -99,6 +114,7 @@ app.put('/api/clientes/:id', exigirLogin, (req, res) => {
 // aceita placa antiga (ABC1234) e Mercosul (ABC1D23)
 const PLACA_VALIDA = /^[A-Z]{3}\d[A-Z0-9]\d{2}$/;
 
+// Lista veículos junto do nome do proprietário usando JOIN entre veículos e clientes.
 app.get('/api/veiculos', exigirLogin, (req, res) => {
     res.json(db.prepare(`
         SELECT v.*, c.nome AS cliente_nome
@@ -106,6 +122,7 @@ app.get('/api/veiculos', exigirLogin, (req, res) => {
         ORDER BY v.modelo`).all());
 });
 
+// Registra veículo após verificar placa, campos obrigatórios, cliente associado e placa duplicada.
 app.post('/api/veiculos', exigirLogin, (req, res) => {
     const { modelo, tipo, marca, cliente_id } = req.body;
     const placa = String(req.body.placa || '').replace(/[\s-]/g, '').toUpperCase();
@@ -125,12 +142,14 @@ app.post('/api/veiculos', exigirLogin, (req, res) => {
 });
 
 // ===================== AGENDAMENTOS =====================
+// Confere o formato e a existência real da data, evitando datas como 31 de fevereiro.
 function dataValida(texto) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(texto || '')) return false;
     const d = new Date(texto + 'T00:00:00');
     return !isNaN(d) && d.toISOString().slice(0, 10) === texto;
 }
 
+// Lista os agendamentos com dados relacionados do veículo e do cliente para a tela de consulta.
 app.get('/api/agendamentos', exigirLogin, (req, res) => {
     const lista = db.prepare(`
         SELECT a.id, a.data_agendamento, a.servico,
@@ -143,6 +162,7 @@ app.get('/api/agendamentos', exigirLogin, (req, res) => {
     res.json(lista.map(a => ({ ...a, cliente_cpf: descriptografar(a.cliente_cpf) })));
 });
 
+// Cria um agendamento, exigindo um veículo existente, data válida e descrição do serviço.
 app.post('/api/agendamentos', exigirLogin, (req, res) => {
     const { veiculo_id, data_agendamento, servico } = req.body;
     if (!veiculo_id || !db.prepare('SELECT id FROM veiculos WHERE id = ?').get(veiculo_id)) {
@@ -155,6 +175,7 @@ app.post('/api/agendamentos', exigirLogin, (req, res) => {
     res.status(201).json({ ok: true });
 });
 
+// Altera a data de um agendamento existente; os demais dados permanecem iguais.
 app.put('/api/agendamentos/:id', exigirLogin, (req, res) => {
     const id = Number(req.params.id);
     if (!db.prepare('SELECT id FROM agendamentos WHERE id = ?').get(id)) {
@@ -168,4 +189,5 @@ app.put('/api/agendamentos/:id', exigirLogin, (req, res) => {
     res.json({ ok: true });
 });
 
+// Inicia o servidor local na porta 3000 para receber conexões do navegador.
 app.listen(3000, () => console.log('Servidor rodando em http://localhost:3000'));
