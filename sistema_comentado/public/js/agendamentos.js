@@ -5,6 +5,7 @@ let editandoId = null;
 iniciarPagina();
 carregar();
 
+// Atualiza a listagem e separa visualmente os agendamentos por mês.
 async function carregar() {
     // a API já devolve ordenado por mês; aqui só mostramos um cabeçalho a cada mês novo
     agendamentos = await api('/api/agendamentos');
